@@ -4,9 +4,12 @@ import { createApp } from "./server.js";
 const config = loadConfig();
 const app = createApp(config);
 
-const server = app.listen(config.server.port, config.server.host, () => {
+const port = process.env.PORT ? Number(process.env.PORT) : config.server.port;
+const host = process.env.PORT ? "0.0.0.0" : config.server.host;
+
+const server = app.listen(port, host, () => {
   process.stdout.write(
-    `OpenClaw Enterprise Control Plane listening on http://${config.server.host}:${config.server.port}\n`,
+    `OpenClaw Enterprise Control Plane listening on http://${host}:${port}\n`,
   );
 });
 
