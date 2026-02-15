@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenClaw Audit Log</title>
+    <style>
+      :root {
+        --bg: #0b1320;
+        --panel: #131f33;
+        --text: #e6edf6;
+        --muted: #9cb0ca;
+        --ok: #20c997;
+        --warn: #ffd166;
+        --danger: #ff6b6b;
+        --line: #27344d;
+        --btn: #1f2e47;
+        --btn-hover: #2a3b59;
+        --premium: #c084fc;
+        --cheap: #38bdf8;
+        --local: #34d399;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        background: radial-gradient(circle at top right, #172c4a, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      main { max-width: 1200px; margin: 0 auto; padding: 28px 18px 42px; }
+
+      h1 { margin: 0 0 18px; font-size: 22px; letter-spacing: 0.3px; }
+
+      .sub { margin: -10px 0 12px; color: var(--muted); font-size: 11px; }
+      .sub a { color: #9ec9ff; }
+
+      .controls, .panel {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .controls {
+        display: grid; gap: 10px; padding: 12px;
+        grid-template-columns: 180px 120px 1fr 1fr;
+      }
+
+      .panel { margin-top: 14px; overflow: auto; }
+
+      label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+
+      input, select, button {
+        font: inherit; color: var(--text);
+        background: #0f1a2c; border: 1px solid var(--line);
+        border-radius: 8px; padding: 8px;
+      }
+
+      button { cursor: pointer; background: var(--btn); }
+      button:hover { background: var(--btn-hover); }
+
+      table { width: 100%; border-collapse: collapse; }
+
+      th, td {
+        padding: 10px; border-bottom: 1px solid var(--line);
+        text-align: left; vertical-align: top; font-size: 12px;
+      }
+
+      th { color: var(--muted); }
+
+      .badge {
+        display: inline-block; border-radius: 999px;
+        padding: 2px 8px; font-size: 11px; border: 1px solid var(--line);
+      }
+
+      .badge.model_routed { color: var(--premium); border-color: var(--premium); }
+      .badge.tool_call_intercepted { color: var(--warn); border-color: var(--warn); }
+      .badge.tool_call_decision { color: var(--ok); border-color: var(--ok); }
+      .badge.approval_created { color: var(--warn); border-color: var(--warn); }
+      .badge.approval_decided { color: var(--ok); border-color: var(--ok); }
+      .badge.tool_result_sanitized { color: var(--danger); border-color: var(--danger); }
+      .badge.outbound_message_checked { color: var(--danger); border-color: var(--danger); }
+      .badge.policy_changed { color: var(--cheap); border-color: var(--cheap); }
+
+      .tier-local { color: var(--local); }
+      .tier-cheap { color: var(--cheap); }
+      .tier-premium { color: var(--premium); }
+
+      .payload { max-width: 500px; word-break: break-all; }
+      .payload code {
+        background: #0a1525; padding: 6px 8px; border-radius: 6px;
+        display: block; font-size: 11px; white-space: pre-wrap;
+        max-height: 120px; overflow-y: auto; border: 1px solid var(--line);
+      }
+
+      .small { color: var(--muted); font-size: 11px; }
+
+      .cost-summary {
+        display: grid; gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-bottom: 12px;
+      }
+
+      .cost-card {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border: 1px solid var(--line); border-radius: 10px; padding: 10px;
+      }
+
+      .cost-label { color: var(--muted); font-size: 11px; }
+      .cost-value { font-size: 18px; margin-top: 3px; }
+
+      #toast { margin-top: 10px; min-height: 16px; color: var(--muted); }
+
+      @media (max-width: 900px) {
+        .controls { grid-template-columns: 1fr; }
+        .cost-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>📋 Audit Log</h1>
+      <div class="sub">
+        <a href="/ui/approvals.html">Approvals</a> |
+        <a href="/ui/metrics.html">Metrics</a> |
+        <a href="/ui/policies.html">Policy rules</a>
+      </div>
+
+      <section class="cost-summary">
+        <div class="cost-card" style="border-color:var(--ok)">
+          <div class="cost-label" style="color:var(--ok)">Total Events</div>
+          <div class="cost-value" id="statTotal" style="color:var(--ok)">-</div>
+        </div>
+        <div class="cost-card" style="border-color:var(--premium)">
+          <div class="cost-label" style="color:var(--premium)">Model Routes</div>
+          <div class="cost-value" id="statRouted" style="color:var(--premium)">-</div>
+        </div>
+        <div class="cost-card" style="border-color:var(--danger)">
+          <div class="cost-label" style="color:var(--danger)">Security Events</div>
+          <div class="cost-value" id="statSecurity" style="color:var(--danger)">-</div>
+        </div>
+        <div class="cost-card" style="border-color:var(--warn)">
+          <div class="cost-label" style="color:var(--warn)">Approvals</div>
+          <div class="cost-value" id="statApprovals" style="color:var(--warn)">-</div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <label>
+          Event Type
+          <select id="typeFilter">
+            <option value="">all events</option>
+            <option value="model_routed">model_routed</option>
+            <option value="tool_call_intercepted">tool_call_intercepted</option>
+            <option value="tool_call_decision">tool_call_decision</option>
+            <option value="approval_created">approval_created</option>
+            <option value="approval_decided">approval_decided</option>
+            <option value="tool_result_sanitized">tool_result_sanitized</option>
+            <option value="outbound_message_checked">outbound_message_checked</option>
+            <option value="policy_changed">policy_changed</option>
+          </select>
+        </label>
+        <label>
+          Limit
+          <select id="limitFilter">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <label>
+          API Key (optional)
+          <input id="apiKey" type="password" placeholder="x-api-key for /v1 auth" />
+        </label>
+        <label>
+          Refresh
+          <button id="refreshBtn" type="button">Refresh now</button>
+        </label>
+      </section>
+
+      <section class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Details</th>
+              <th>Payload</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+
+      <div id="toast"></div>
+    </main>
+
+    <script>
+      const rowsEl = document.getElementById("rows");
+      const typeFilterEl = document.getElementById("typeFilter");
+      const limitFilterEl = document.getElementById("limitFilter");
+      const apiKeyEl = document.getElementById("apiKey");
+      const refreshBtn = document.getElementById("refreshBtn");
+      const toastEl = document.getElementById("toast");
+
+      function setToast(msg, err = false) {
+        toastEl.textContent = msg;
+        toastEl.style.color = err ? "#ff6b6b" : "#9cb0ca";
+      }
+
+      function authHeaders() {
+        const key = (apiKeyEl.value || "").trim();
+        return key ? { "x-api-key": key } : {};
+      }
+
+      async function fetchJson(url, opts = {}) {
+        const headers = { ...(opts.headers || {}), ...authHeaders() };
+        const res = await fetch(url, { ...opts, headers });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || "Request failed");
+        }
+        return res.json();
+      }
+
+      function formatTime(ts) {
+        const d = new Date(ts);
+        return d.toLocaleTimeString() + " " + d.toLocaleDateString();
+      }
+
+      function summarize(type, p) {
+        switch (type) {
+          case "model_routed":
+            return `<span class="tier-${p.tier}"><strong>${p.tier}</strong></span> → ${p.model}<br>
+                    <span class="small">${p.reason}</span><br>
+                    <span class="small">Tokens: ~${p.estimatedTokens} | Cost: $${((p.estimatedTokens / 1e6) * (p.tierCostPerMillion || 0)).toFixed(6)}/req</span>`;
+          case "tool_call_intercepted":
+            return `Tool: <strong>${p.toolName}</strong>`;
+          case "tool_call_decision":
+            return `<strong>${p.toolName}</strong> → <strong>${p.decision}</strong><br><span class="small">${p.reason || ""}</span>`;
+          case "approval_created":
+            return `Tool: <strong>${p.toolName}</strong><br><span class="small">ID: ${p.approvalId}</span>`;
+          case "approval_decided":
+            return `<strong>${p.decision}</strong> by ${p.actor}<br><span class="small">ID: ${p.approvalId}</span>`;
+          case "tool_result_sanitized":
+            return `Redactions: <strong>${p.redactions?.length || 0}</strong><br><span class="small">${(p.redactions || []).join(", ")}</span>`;
+          case "outbound_message_checked":
+            return `Allowed: <strong style="color:${p.allowed ? "var(--ok)" : "var(--danger)"}">${p.allowed}</strong>${p.deniedPattern ? `<br><span class="small">Blocked by: ${p.deniedPattern}</span>` : ""}`;
+          case "policy_changed":
+            return `<strong>${p.action}</strong> rule: ${p.ruleId}`;
+          default:
+            return "";
+        }
+      }
+
+      function renderRows(items) {
+        if (!items.length) {
+          rowsEl.innerHTML = `<tr><td colspan="4" class="small">No audit events found.</td></tr>`;
+          return;
+        }
+
+        rowsEl.innerHTML = items.map(ev => `
+          <tr>
+            <td class="small">${formatTime(ev.timestamp)}</td>
+            <td><span class="badge ${ev.type}">${ev.type}</span></td>
+            <td>${summarize(ev.type, ev.payload || {})}</td>
+            <td class="payload"><code>${JSON.stringify(ev.payload || {}, null, 2)}</code></td>
+          </tr>
+        `).join("");
+      }
+
+      function updateStats(items) {
+        document.getElementById("statTotal").textContent = items.length;
+        document.getElementById("statRouted").textContent = items.filter(e => e.type === "model_routed").length;
+        document.getElementById("statSecurity").textContent = items.filter(e =>
+          e.type === "tool_result_sanitized" || e.type === "outbound_message_checked"
+        ).length;
+        document.getElementById("statApprovals").textContent = items.filter(e =>
+          e.type === "approval_created" || e.type === "approval_decided"
+        ).length;
+      }
+
+      async function load() {
+        const type = typeFilterEl.value;
+        const limit = limitFilterEl.value;
+        let url = `/v1/audit/events?limit=${limit}`;
+        if (type) url += `&type=${encodeURIComponent(type)}`;
+
+        const body = await fetchJson(url);
+        const items = Array.isArray(body.items) ? body.items : [];
+        renderRows(items);
+        updateStats(items);
+        setToast(`Loaded ${items.length} events at ${new Date().toLocaleTimeString()}`);
+      }
+
+      refreshBtn.addEventListener("click", () => load().catch(e => setToast(e.message, true)));
+      typeFilterEl.addEventListener("change", () => load().catch(e => setToast(e.message, true)));
+      limitFilterEl.addEventListener("change", () => load().catch(e => setToast(e.message, true)));
+
+      apiKeyEl.value = localStorage.getItem("controlPlaneApiKey") || "";
+      apiKeyEl.addEventListener("input", () =>
+        localStorage.setItem("controlPlaneApiKey", apiKeyEl.value || "")
+      );
+
+      load().catch(e => setToast(e.message, true));
+      setInterval(() => load().catch(e => setToast("Auto-refresh failed", true)), 8000);
+    </script>
+  </body>
+</html>
