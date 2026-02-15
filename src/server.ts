@@ -156,6 +156,10 @@ export function createApp(config: AppConfig) {
     res.json({ ok: true });
   });
 
+  app.get("/", (_req, res) => {
+    res.redirect("/ui/approvals.html");
+  });
+
   app.post("/v1/tool-calls/intercept", (req, res) => {
     try {
       const call = parseToolCall(req.body);
