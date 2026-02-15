@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenClaw Approvals</title>
+    <style>
+      :root {
+        --bg: #0b1320;
+        --panel: #131f33;
+        --text: #e6edf6;
+        --muted: #9cb0ca;
+        --ok: #20c997;
+        --warn: #ffd166;
+        --danger: #ff6b6b;
+        --line: #27344d;
+        --btn: #1f2e47;
+        --btn-hover: #2a3b59;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        background: radial-gradient(circle at top right, #172c4a, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 28px 18px 42px;
+      }
+
+      h1 {
+        margin: 0 0 18px;
+        font-size: 22px;
+        letter-spacing: 0.3px;
+      }
+
+      .sub {
+        margin: -10px 0 12px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .sub a {
+        color: #9ec9ff;
+      }
+
+      .metrics {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-bottom: 12px;
+      }
+
+      .metric-card {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .metric-value {
+        font-size: 18px;
+        margin-top: 3px;
+      }
+
+      .controls,
+      .panel {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .controls {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        grid-template-columns: 180px 1fr 1fr 1fr 1fr;
+      }
+
+      .panel {
+        margin-top: 14px;
+        overflow: auto;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      input,
+      select,
+      button,
+      textarea {
+        font: inherit;
+        color: var(--text);
+        background: #0f1a2c;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      button {
+        cursor: pointer;
+        background: var(--btn);
+      }
+
+      button:hover {
+        background: var(--btn-hover);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        font-size: 12px;
+      }
+
+      th {
+        color: var(--muted);
+      }
+
+      .status {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+
+      .status.pending {
+        color: var(--warn);
+      }
+
+      .status.approved {
+        color: var(--ok);
+      }
+
+      .status.rejected,
+      .status.expired {
+        color: var(--danger);
+      }
+
+      .actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      #toast {
+        margin-top: 10px;
+        min-height: 16px;
+        color: var(--muted);
+      }
+
+      @media (max-width: 900px) {
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .controls {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Approval Queue</h1>
+      <div class="sub">Need trends? <a href="/ui/metrics.html">Metrics dashboard</a> | <a href="/ui/policies.html">Policy rules</a></div>
+      <section class="metrics">
+        <div class="metric-card" style="border-color:var(--ok)">
+          <div class="metric-label" style="color:var(--ok)">Est. Savings</div>
+          <div class="metric-value" id="metricSavings" style="color:var(--ok)">-</div>
+        </div>
+        <div class="metric-card" style="border-color:var(--ok)">
+          <div class="metric-label" style="color:var(--ok)">Savings %</div>
+          <div class="metric-value" id="metricSavingsPct" style="color:var(--ok)">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Pending Approvals</div>
+          <div class="metric-value" id="metricPending">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Policy Denies</div>
+          <div class="metric-value" id="metricDeny">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Outbound Blocks</div>
+          <div class="metric-value" id="metricOutboundBlocked">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Premium Routes</div>
+          <div class="metric-value" id="metricPremiumRoutes">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Redaction Events</div>
+          <div class="metric-value" id="metricRedactions">-</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Est. Cost</div>
+          <div class="metric-value" id="metricCost">-</div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <label>
+          Status
+          <select id="statusFilter">
+            <option value="pending">pending</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+            <option value="expired">expired</option>
+            <option value="">all</option>
+          </select>
+        </label>
+        <label>
+          Actor (required to decide)
+          <input id="actor" type="text" value="admin@company.com" />
+        </label>
+        <label>
+          Note
+          <input id="note" type="text" placeholder="Optional approval note" />
+        </label>
+        <label>
+          API Key (optional)
+          <input id="apiKey" type="password" placeholder="x-api-key for /v1 auth" />
+        </label>
+        <label>
+          Refresh
+          <button id="refreshBtn" type="button">Refresh now</button>
+        </label>
+      </section>
+
+      <section class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Status</th>
+              <th>Tool</th>
+              <th>Reason</th>
+              <th>Timestamps</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+
+      <div id="toast"></div>
+    </main>
+
+    <script>
+      const rowsEl = document.getElementById("rows");
+      const statusFilterEl = document.getElementById("statusFilter");
+      const actorEl = document.getElementById("actor");
+      const noteEl = document.getElementById("note");
+      const apiKeyEl = document.getElementById("apiKey");
+      const refreshBtn = document.getElementById("refreshBtn");
+      const toastEl = document.getElementById("toast");
+      const metricSavingsEl = document.getElementById("metricSavings");
+      const metricSavingsPctEl = document.getElementById("metricSavingsPct");
+      const metricPendingEl = document.getElementById("metricPending");
+      const metricDenyEl = document.getElementById("metricDeny");
+      const metricOutboundBlockedEl = document.getElementById("metricOutboundBlocked");
+      const metricPremiumRoutesEl = document.getElementById("metricPremiumRoutes");
+      const metricRedactionsEl = document.getElementById("metricRedactions");
+      const metricCostEl = document.getElementById("metricCost");
+
+      function setToast(message, isError = false) {
+        toastEl.textContent = message;
+        toastEl.style.color = isError ? "#ff6b6b" : "#9cb0ca";
+      }
+
+      function asJson(response) {
+        if (!response.ok) {
+          return response.json().then((body) => {
+            throw new Error(body.error || "Request failed");
+          });
+        }
+        return response.json();
+      }
+
+      function authHeaders() {
+        const key = (apiKeyEl.value || "").trim();
+        if (!key) {
+          return {};
+        }
+        return { "x-api-key": key };
+      }
+
+      async function fetchJson(url, options = {}) {
+        const headers = {
+          ...(options.headers || {}),
+          ...authHeaders(),
+        };
+        const response = await fetch(url, { ...options, headers });
+        return asJson(response);
+      }
+
+      function renderRows(items) {
+        if (!items.length) {
+          rowsEl.innerHTML = `<tr><td colspan="6" class="small">No approvals found.</td></tr>`;
+          return;
+        }
+
+        rowsEl.innerHTML = items
+          .map((item) => {
+            const safeReason = String(item.reason || "").slice(0, 140);
+            const safeTool = String(item.toolCall?.toolName || "unknown");
+            const canDecide = item.status === "pending";
+            return `
+              <tr>
+                <td><code>${item.id}</code></td>
+                <td><span class="status ${item.status}">${item.status}</span></td>
+                <td>
+                  <div>${safeTool}</div>
+                  <div class="small"><code>${JSON.stringify(item.toolCall?.params || {})}</code></div>
+                </td>
+                <td>${safeReason}</td>
+                <td>
+                  <div class="small">created: ${item.createdAt}</div>
+                  <div class="small">expires: ${item.expiresAt}</div>
+                  <div class="small">decided: ${item.decidedAt || "-"}</div>
+                </td>
+                <td>
+                  <div class="actions">
+                    <button type="button" data-action="approve" data-id="${item.id}" ${canDecide ? "" : "disabled"}>Approve</button>
+                    <button type="button" data-action="reject" data-id="${item.id}" ${canDecide ? "" : "disabled"}>Reject</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+      }
+
+      function renderMetrics(summary) {
+        metricSavingsEl.textContent = "$" + (summary?.routing?.estimatedSavings || 0).toFixed(4);
+        metricSavingsPctEl.textContent = (summary?.routing?.savingsPercentage || 0).toFixed(1) + "%";
+        metricPendingEl.textContent = String(summary?.approvals?.pending ?? "-");
+        metricDenyEl.textContent = String(summary?.policy?.deny ?? "-");
+        metricOutboundBlockedEl.textContent = String(summary?.security?.outboundBlocked ?? "-");
+        metricPremiumRoutesEl.textContent = String(summary?.routing?.byTier?.premium ?? "-");
+        metricRedactionsEl.textContent = String(summary?.security?.redactionEvents ?? "-");
+        metricCostEl.textContent = "$" + (summary?.routing?.estimatedCost || 0).toFixed(4);
+      }
+
+      async function loadApprovals() {
+        const status = statusFilterEl.value;
+        const query = status ? `?status=${encodeURIComponent(status)}` : "";
+        const body = await fetchJson(`/v1/approvals${query}`);
+        renderRows(Array.isArray(body.items) ? body.items : []);
+        setToast(`Loaded ${body.items?.length || 0} approval requests at ${new Date().toLocaleTimeString()}`);
+      }
+
+      async function loadMetrics() {
+        const body = await fetchJson(`/v1/metrics/summary?windowMinutes=60`);
+        renderMetrics(body);
+      }
+
+      async function refreshAll() {
+        await Promise.all([loadApprovals(), loadMetrics()]);
+      }
+
+      async function decide(id, decision) {
+        const actor = actorEl.value.trim();
+        const note = noteEl.value.trim();
+        if (!actor) {
+          setToast("Actor is required", true);
+          return;
+        }
+
+        await fetchJson(`/v1/approvals/${encodeURIComponent(id)}/decision`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            actor,
+            decision,
+            note: note || undefined,
+          }),
+        });
+        setToast(`${decision} ${id}`);
+        await refreshAll();
+      }
+
+      rowsEl.addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const id = target.dataset.id;
+        const action = target.dataset.action;
+        if (!id || !action) {
+          return;
+        }
+
+        target.disabled = true;
+        try {
+          await decide(id, action === "approve" ? "approved" : "rejected");
+        } catch (error) {
+          setToast(error instanceof Error ? error.message : "Decision failed", true);
+        } finally {
+          target.disabled = false;
+        }
+      });
+
+      refreshBtn.addEventListener("click", () => {
+        refreshAll().catch((error) => {
+          setToast(error instanceof Error ? error.message : "Load failed", true);
+        });
+      });
+
+      statusFilterEl.addEventListener("change", () => {
+        refreshAll().catch((error) => {
+          setToast(error instanceof Error ? error.message : "Load failed", true);
+        });
+      });
+
+      apiKeyEl.value = localStorage.getItem("controlPlaneApiKey") || "";
+      apiKeyEl.addEventListener("input", () => {
+        localStorage.setItem("controlPlaneApiKey", apiKeyEl.value || "");
+      });
+
+      refreshAll().catch((error) => {
+        setToast(error instanceof Error ? error.message : "Load failed", true);
+      });
+
+      setInterval(() => {
+        refreshAll().catch((error) => {
+          setToast(error instanceof Error ? error.message : "Auto-refresh failed", true);
+        });
+      }, 5000);
+    </script>
+  </body>
+</html>

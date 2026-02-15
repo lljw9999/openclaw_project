@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenClaw Policy Rules</title>
+    <style>
+      :root {
+        --bg: #0b1320;
+        --panel: #131f33;
+        --text: #e6edf6;
+        --muted: #9cb0ca;
+        --ok: #20c997;
+        --warn: #ffd166;
+        --danger: #ff6b6b;
+        --line: #27344d;
+        --btn: #1f2e47;
+        --btn-hover: #2a3b59;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "SF Mono", Menlo, Consolas, monospace;
+        background: radial-gradient(circle at top right, #172c4a, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 28px 18px 42px;
+      }
+
+      h1 { margin: 0 0 18px; font-size: 22px; }
+
+      .sub { margin: -10px 0 12px; color: var(--muted); font-size: 11px; }
+      .sub a { color: #9ec9ff; }
+
+      .form-panel, .panel {
+        background: color-mix(in srgb, var(--panel) 92%, black);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+
+      .form-panel {
+        padding: 14px;
+        margin-bottom: 14px;
+      }
+
+      .form-panel h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1fr 1fr 1fr 1fr auto;
+        align-items: end;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      input, select, button, textarea {
+        font: inherit;
+        color: var(--text);
+        background: #0f1a2c;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      button { cursor: pointer; background: var(--btn); }
+      button:hover { background: var(--btn-hover); }
+      button.add { background: #1a3a2a; border-color: var(--ok); }
+      button.add:hover { background: #1f4a32; }
+      button.delete { color: var(--danger); }
+
+      .panel { margin-top: 14px; overflow: auto; }
+
+      table { width: 100%; border-collapse: collapse; }
+
+      th, td {
+        padding: 10px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        font-size: 12px;
+      }
+
+      th { color: var(--muted); }
+
+      .badge {
+        display: inline-block;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+      }
+
+      .badge.allow { color: var(--ok); }
+      .badge.ask { color: var(--warn); }
+      .badge.deny { color: var(--danger); }
+
+      .small { color: var(--muted); font-size: 11px; }
+
+      #toast {
+        margin-top: 10px;
+        min-height: 16px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 900px) {
+        .form-grid { grid-template-columns: 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Policy Rules</h1>
+      <div class="sub"><a href="/ui/approvals.html">Approvals queue</a> | <a href="/ui/metrics.html">Metrics dashboard</a></div>
+
+      <section class="form-panel">
+        <h2>Add Rule</h2>
+        <div class="form-grid">
+          <label>Rule ID<input id="ruleId" type="text" placeholder="e.g. allow-web-fetch" /></label>
+          <label>Tool Names (comma-sep)<input id="toolNames" type="text" placeholder="e.g. web_fetch,file_read" /></label>
+          <label>Decision
+            <select id="decision">
+              <option value="allow">allow</option>
+              <option value="ask">ask</option>
+              <option value="deny">deny</option>
+            </select>
+          </label>
+          <label>Description<input id="description" type="text" placeholder="Optional" /></label>
+          <button class="add" id="addBtn" type="button">Add</button>
+        </div>
+      </section>
+
+      <section class="form-panel" style="padding:8px 14px">
+        <label style="display:inline-grid;width:250px">API Key (optional)
+          <input id="apiKey" type="password" placeholder="x-api-key for /v1 auth" />
+        </label>
+      </section>
+
+      <section class="panel">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Decision</th>
+              <th>Match</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </section>
+
+      <div id="toast"></div>
+    </main>
+
+    <script>
+      const rowsEl = document.getElementById("rows");
+      const apiKeyEl = document.getElementById("apiKey");
+      const toastEl = document.getElementById("toast");
+      const addBtn = document.getElementById("addBtn");
+      const ruleIdEl = document.getElementById("ruleId");
+      const toolNamesEl = document.getElementById("toolNames");
+      const decisionEl = document.getElementById("decision");
+      const descriptionEl = document.getElementById("description");
+
+      function setToast(msg, isError) {
+        toastEl.textContent = msg;
+        toastEl.style.color = isError ? "#ff6b6b" : "#9cb0ca";
+      }
+
+      function authHeaders() {
+        const key = (apiKeyEl.value || "").trim();
+        return key ? { "x-api-key": key } : {};
+      }
+
+      async function api(path, opts) {
+        const headers = { ...authHeaders(), ...(opts?.headers || {}) };
+        const res = await fetch(path, { ...opts, headers });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "Request failed");
+        return body;
+      }
+
+      function esc(s) {
+        const d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function renderRows(items) {
+        if (!items.length) {
+          rowsEl.innerHTML = '<tr><td colspan="5" class="small">No rules configured.</td></tr>';
+          return;
+        }
+        rowsEl.innerHTML = items.map(r => {
+          const matchStr = JSON.stringify(r.match || {});
+          return `<tr>
+            <td><code>${esc(r.id)}</code></td>
+            <td><span class="badge ${r.decision}">${r.decision}</span></td>
+            <td class="small"><code>${esc(matchStr.length > 120 ? matchStr.slice(0, 120) + "..." : matchStr)}</code></td>
+            <td class="small">${esc(r.description || r.reason || "-")}</td>
+            <td><button class="delete" data-id="${esc(r.id)}" type="button">Delete</button></td>
+          </tr>`;
+        }).join("");
+      }
+
+      async function loadRules() {
+        const data = await api("/v1/policies");
+        renderRows(Array.isArray(data.items) ? data.items : []);
+        setToast("Loaded " + (data.items?.length || 0) + " rules at " + new Date().toLocaleTimeString());
+      }
+
+      addBtn.addEventListener("click", async () => {
+        const id = ruleIdEl.value.trim();
+        if (!id) { setToast("Rule ID is required", true); return; }
+        const toolNames = toolNamesEl.value.split(",").map(s => s.trim()).filter(Boolean);
+        const match = toolNames.length ? { toolNames } : {};
+        try {
+          await api("/v1/policies", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id,
+              match,
+              decision: decisionEl.value,
+              description: descriptionEl.value.trim() || undefined,
+            }),
+          });
+          ruleIdEl.value = "";
+          toolNamesEl.value = "";
+          descriptionEl.value = "";
+          setToast("Rule created: " + id);
+          await loadRules();
+        } catch (e) {
+          setToast(e.message, true);
+        }
+      });
+
+      rowsEl.addEventListener("click", async (e) => {
+        const btn = e.target;
+        if (!(btn instanceof HTMLButtonElement) || !btn.dataset.id) return;
+        btn.disabled = true;
+        try {
+          await api("/v1/policies/" + encodeURIComponent(btn.dataset.id), { method: "DELETE" });
+          setToast("Deleted: " + btn.dataset.id);
+          await loadRules();
+        } catch (err) {
+          setToast(err.message, true);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      apiKeyEl.value = localStorage.getItem("controlPlaneApiKey") || "";
+      apiKeyEl.addEventListener("input", () => {
+        localStorage.setItem("controlPlaneApiKey", apiKeyEl.value || "");
+      });
+
+      loadRules().catch(e => setToast(e.message, true));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+{
+  "server": {
+    "port": 3010,
+    "host": "127.0.0.1"
+  },
+  "auth": {
+    "required": false,
+    "apiKeyEnv": "CONTROL_PLANE_API_KEY",
+    "headerName": "x-api-key"
+  },
+  "approvals": {
+    "ttlMs": 900000,
+    "persistPath": "data/approvals.json"
+  },
+  "audit": {
+    "persistPath": "data/audit.log",
+    "maxInMemoryEvents": 5000
+  },
+  "policy": {
+    "defaultDecision": "ask",
+    "rules": [
+      {
+        "id": "allow-safe-read-tools",
+        "description": "Allow low-risk read-only tools.",
+        "match": {
+          "toolNames": ["web_fetch", "web_search", "file_read"]
+        },
+        "decision": "allow"
+      },
+      {
+        "id": "deny-sensitive-files",
+        "description": "Block access to SSH keys and environment files.",
+        "match": {
+          "pathPrefixes": ["~/.ssh", "/Users", "/etc", "/root"],
+          "toolNames": ["file_write", "file_read", "shell_exec"]
+        },
+        "decision": "deny"
+      },
+      {
+        "id": "ask-shell-exec",
+        "description": "Require human approval for shell execution.",
+        "match": {
+          "toolNames": ["shell_exec"]
+        },
+        "decision": "ask"
+      },
+      {
+        "id": "deny-dangerous-shell-patterns",
+        "description": "Block known destructive shell command patterns.",
+        "match": {
+          "toolNames": ["shell_exec"],
+          "commandRegex": ["rm\\s+-rf", "curl\\s+.*\\|\\s*sh", "chmod\\s+777"]
+        },
+        "decision": "deny"
+      },
+      {
+        "id": "ask-browser-login-actions",
+        "description": "Require approval for browser actions that may involve credentials.",
+        "match": {
+          "toolNames": ["browser_act"],
+          "commandRegex": ["login", "password", "checkout", "payment"]
+        },
+        "decision": "ask"
+      }
+    ],
+    "redactionPatterns": [
+      "AKIA[0-9A-Z]{16}",
+      "sk-[a-zA-Z0-9]{20,}",
+      "ssh-rsa\\s+[A-Za-z0-9+/=]+",
+      "-----BEGIN [A-Z ]+PRIVATE KEY-----"
+    ],
+    "denyOutboundPatterns": [
+      "seed phrase",
+      "mnemonic",
+      "private key"
+    ],
+    "promptInjectionPatterns": [
+      "ignore previous instructions",
+      "reveal system prompt",
+      "override policy",
+      "exfiltrate"
+    ]
+  },
+  "rateLimit": {
+    "windowMs": 60000,
+    "maxRequests": 100
+  },
+  "routing": {
+    "local": {
+      "model": "llama3.1:8b",
+      "maxPromptChars": 1400,
+      "heartbeatKeywords": ["heartbeat", "status check", "routine check", "idle check"],
+      "costPerMillionTokens": 0
+    },
+    "cheap": {
+      "model": "@vertexai/gemini-2.0-flash",
+      "costPerMillionTokens": 0.40
+    },
+    "premium": {
+      "model": "@vertexai/anthropic.claude-opus-4-5@20251101",
+      "costPerMillionTokens": 15.00
+    },
+    "providers": {
+      "local": {
+        "baseUrl": "http://127.0.0.1:11434/v1",
+        "chatCompletionsPath": "/chat/completions"
+      },
+      "cheap": {
+        "baseUrl": "https://ai-gateway.apps.cloud.rt.nyu.edu/v1",
+        "chatCompletionsPath": "/chat/completions",
+        "apiKeyEnv": "PORTKEY_API_KEY"
+      },
+      "premium": {
+        "baseUrl": "https://ai-gateway.apps.cloud.rt.nyu.edu/v1",
+        "chatCompletionsPath": "/chat/completions",
+        "apiKeyEnv": "PORTKEY_API_KEY"
+      },
+      "requestTimeoutMs": 30000
+    },
+    "complexity": {
+      "premiumPromptChars": 4500,
+      "premiumKeywords": ["threat model", "architecture", "optimize", "refactor", "migration plan", "regulatory"],
+      "cheapKeywords": ["summarize", "status", "brief", "rewrite"]
+    }
+  }
+}

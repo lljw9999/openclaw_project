@@ -1,0 +1,12 @@
+services:
+  control-plane:
+    build: .
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    environment:
+      - CONFIG_PATH=/app/config/default.json
+      - CONTROL_PLANE_API_KEY
+      - PORTKEY_API_KEY

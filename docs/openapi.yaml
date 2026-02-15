@@ -1,0 +1,659 @@
+openapi: "3.0.3"
+info:
+  title: OpenClaw Enterprise Control Plane
+  version: "0.1.0"
+  description: >
+    Policy interception, approval workflows, audit logging, cost-aware model
+    routing, and security sanitization for AI agent tool calls.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+security:
+  - apiKey: []
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    ToolCallRequest:
+      type: object
+      required: [toolName, params]
+      properties:
+        toolName:
+          type: string
+        params:
+          type: object
+        context:
+          type: object
+          properties:
+            sessionId:
+              type: string
+            channel:
+              type: string
+            source:
+              type: string
+            userId:
+              type: string
+            message:
+              type: string
+
+    PolicyDecision:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [allow, ask, deny]
+        ruleId:
+          type: string
+        reason:
+          type: string
+        approvalId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    PolicyRule:
+      type: object
+      required: [id, match, decision]
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        match:
+          type: object
+          properties:
+            toolNames:
+              type: array
+              items:
+                type: string
+            sources:
+              type: array
+              items:
+                type: string
+            channels:
+              type: array
+              items:
+                type: string
+            commandRegex:
+              type: array
+              items:
+                type: string
+            pathPrefixes:
+              type: array
+              items:
+                type: string
+            hostAllowlist:
+              type: array
+              items:
+                type: string
+            hostDenylist:
+              type: array
+              items:
+                type: string
+        decision:
+          type: string
+          enum: [allow, ask, deny]
+        reason:
+          type: string
+
+    ApprovalRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        toolCall:
+          $ref: "#/components/schemas/ToolCallRequest"
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, expired]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+        note:
+          type: string
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum:
+            - tool_call_intercepted
+            - tool_call_decision
+            - approval_created
+            - approval_decided
+            - tool_result_sanitized
+            - outbound_message_checked
+            - model_routed
+            - policy_changed
+        payload:
+          type: object
+
+    RouteRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        metadata:
+          type: object
+          properties:
+            isHeartbeat:
+              type: boolean
+            taskType:
+              type: string
+        requestedModel:
+          type: string
+
+    RouteDecision:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [local, cheap, premium]
+        model:
+          type: string
+        reason:
+          type: string
+
+    MetricsSummary:
+      type: object
+      properties:
+        window:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+            minutes:
+              type: integer
+        totals:
+          type: object
+          properties:
+            events:
+              type: integer
+        approvals:
+          type: object
+        policy:
+          type: object
+        security:
+          type: object
+        routing:
+          type: object
+          properties:
+            total:
+              type: integer
+            byTier:
+              type: object
+            averagePromptLength:
+              type: number
+            estimatedCost:
+              type: number
+            estimatedSavings:
+              type: number
+            savingsPercentage:
+              type: number
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /v1/tool-calls/intercept:
+    post:
+      summary: Intercept a tool call for policy evaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolCallRequest"
+      responses:
+        "200":
+          description: Policy decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyDecision"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/approvals:
+    get:
+      summary: List approval requests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, expired]
+      responses:
+        "200":
+          description: List of approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApprovalRequest"
+
+  /v1/approvals/{id}:
+    get:
+      summary: Get a single approval request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approval details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/approvals/{id}/decision:
+    post:
+      summary: Approve or reject an approval request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision, actor]
+              properties:
+                decision:
+                  type: string
+                  enum: [approved, rejected]
+                actor:
+                  type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Updated approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/tool-results/sanitize:
+    post:
+      summary: Sanitize tool output (redact secrets, flag injection)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [output]
+              properties:
+                output:
+                  type: string
+      responses:
+        "200":
+          description: Sanitized result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sanitized:
+                    type: string
+                  redactions:
+                    type: array
+                    items:
+                      type: string
+                  promptInjectionFlags:
+                    type: array
+                    items:
+                      type: string
+
+  /v1/outbound/check:
+    post:
+      summary: Check outbound message for denied patterns
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        "200":
+          description: Outbound check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  deniedPattern:
+                    type: string
+                  redactions:
+                    type: array
+                    items:
+                      type: string
+
+  /v1/model-router/route:
+    post:
+      summary: Route a prompt to the optimal model tier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteRequest"
+      responses:
+        "200":
+          description: Routing decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteDecision"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/chat/completions:
+    post:
+      summary: Proxy chat completions with intelligent routing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                messages:
+                  type: array
+                  items:
+                    type: object
+                prompt:
+                  type: string
+                metadata:
+                  type: object
+      responses:
+        "200":
+          description: Forwarded chat completion response
+          headers:
+            x-route-tier:
+              schema:
+                type: string
+            x-route-model:
+              schema:
+                type: string
+            x-route-reason:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream provider error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/policies:
+    get:
+      summary: List all policy rules
+      responses:
+        "200":
+          description: Policy rules
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PolicyRule"
+    post:
+      summary: Create a new policy rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyRule"
+      responses:
+        "201":
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyRule"
+        "400":
+          description: Invalid request or duplicate ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/policies/{id}:
+    put:
+      summary: Update an existing policy rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                match:
+                  type: object
+                decision:
+                  type: string
+                  enum: [allow, ask, deny]
+                description:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyRule"
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Delete a policy rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rule deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+        "404":
+          description: Rule not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/audit/events:
+    get:
+      summary: List audit events
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+
+  /v1/metrics/summary:
+    get:
+      summary: Get aggregated metrics summary
+      parameters:
+        - name: windowMinutes
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Metrics summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MetricsSummary"
+
+  /v1/metrics/timeseries:
+    get:
+      summary: Get timeseries metrics buckets
+      parameters:
+        - name: windowMinutes
+          in: query
+          schema:
+            type: integer
+        - name: bucketMinutes
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Timeseries metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  window:
+                    type: object
+                  buckets:
+                    type: array
+                    items:
+                      type: object

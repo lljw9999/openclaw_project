@@ -1,0 +1,55 @@
+{
+  "id": "enterprise-control-plane",
+  "name": "Enterprise Control Plane",
+  "description": "Policy enforcement hooks for OpenClaw agent lifecycle events.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "HTTP base URL of the control plane API"
+      },
+      "apiKey": {
+        "type": "string",
+        "description": "Optional API key sent as x-api-key"
+      },
+      "pollIntervalMs": {
+        "type": "integer",
+        "minimum": 50,
+        "maximum": 60000,
+        "default": 1000
+      },
+      "pollTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 1800000,
+        "default": 120000
+      },
+      "strict": {
+        "type": "boolean",
+        "default": false
+      }
+    }
+  },
+  "uiHints": {
+    "baseUrl": {
+      "label": "Control Plane URL",
+      "placeholder": "http://127.0.0.1:3000"
+    },
+    "apiKey": {
+      "label": "Control Plane API Key",
+      "sensitive": true
+    },
+    "pollIntervalMs": {
+      "label": "Approval Poll Interval (ms)"
+    },
+    "pollTimeoutMs": {
+      "label": "Approval Poll Timeout (ms)"
+    },
+    "strict": {
+      "label": "Strict Event Parsing"
+    }
+  }
+}
